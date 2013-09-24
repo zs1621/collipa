@@ -8,7 +8,7 @@ from ._base import db, SessionMixin, ModelMixin
 import config
 import models as m
 from helpers import format_date2, strip_tags
-from extensions import mc
+from extensions import mc, rd
 
 config = config.rec()
 
@@ -63,6 +63,7 @@ class User(db.Entity, SessionMixin, ModelMixin):
     background_img = Optional(unicode, 400)
 
     @staticmethod
+    @db_session
     def init(**kargs):
         token = User.create_token(16)
         kargs.update(dict(token=token))
@@ -629,3 +630,9 @@ class User(db.Entity, SessionMixin, ModelMixin):
                     config.user_paged]
         else:
             return followings
+
+    @property
+    def is_online(self):
+        online = rd.smembers("online") or [0]
+        online = [int(i) for i in online]
+        return self.id in online

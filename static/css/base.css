@@ -174,6 +174,10 @@ textarea:focus {
   margin: 0px auto;
 }
 
+#shape.mobile .content img.upload-topic-image {
+  max-width: 360px !important;
+}
+
 .shape {
   box-shadow: 0px 0px 40px rgba(0, 0, 0, 0.15);
 }
@@ -558,7 +562,6 @@ label {
 .topic .topic-content {
     padding: 20px 110px 5px 30px;
     font-size: 14px;
-    line-height: 22px;
     min-height: 60px;
     word-wrap: break-word;
 }
@@ -837,9 +840,6 @@ ul.child-nodes li .description {
 }
 .single .item-content {
   padding-left: 0px;
-}
-.single .reply-content {
-  padding: 10px;
 }
 .top-border {
   border-top: 1px solid #e2e2e2;
@@ -1414,4 +1414,74 @@ ul.users li a div.username span {
   font-size: 12px;
   color: rgb(156, 156, 156);
   text-align: center;
+}
+.reply-single .item-title {
+  padding: 10px 20px;
+  background: rgb(248, 248, 248);
+}
+.reply-single .item-content {
+  padding: 5px 20px 20px 20px;
+}
+.setting .description {
+  text-align: center;
+}
+.saying {
+  margin-top: 20px;
+  padding-top: 15px;
+  text-align: center;
+  color: rgb(145, 145, 145);
+  border-top: 2px dashed rgb(230, 230, 230);
+}
+.forget-password {
+  padding: 0 20px 15px 20px;
+  display: inline-block;
+}
+
+#footer {
+  padding: 16px;
+}
+
+#footer,
+#footer a {
+  color: rgb(146, 146, 146);
+  text-shadow: 1px 1px 0px #ffffff;
+}
+.tc {
+  text-align: center;
+}
+.offline,
+.online {
+  display: inline-block;
+  background-color: rgb(34, 165, 34);
+  width: 10px;
+  height: 10px;
+  border-radius: 10px;
+}
+.offline {
+  background-color: rgb(167, 167, 167) !important;
+}
+#shape.mobile .profile-card .status {
+  display: none;
+}
+#shape.mobile .message-list {
+  padding: 10px 20px;
+}
+#shape.mobile ul.parent-nodes li,
+#shape.mobile ul.sibling-nodes li,
+#shape.mobile ul.child-nodes li {
+  width: 120px;
+}
+#shape.mobile ul.users li a {
+  width: 60px;
+  height: 87px;
+}
+#shape.mobile ul.users li a div.username span {
+  width: 50px;
+}
+#shape.mobile ul.users li a div.avatar img.avatar {
+  width: 60px;
+  height: 60px;
+}
+#shape.mobile ul.users li a div.avatar {
+  height: 60px;
 }

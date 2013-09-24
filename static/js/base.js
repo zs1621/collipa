@@ -3,16 +3,19 @@ var get_cookie = function(name) {
   return r?r[1]:undefined;
   },
 
-  popup = function(popdiv) {
+  popup = function($popdiv) {
     var _scrollHeight = $(document).scrollTop(),
         _windowHeight = $(window).height(),
         _windowWidth  = $(window).width(),
-        _popdivHeight = popdiv.height(),
-        _popdivWidth  = popdiv.width();
+        _popdivHeight = $popdiv.height(),
+        _popdivWidth  = $popdiv.width();
 
     _popTop = (_windowHeight - _popdivHeight) / 2;
     _popLeft = (_windowWidth - _popdivWidth) / 2;
-    popdiv.css({'left': _popLeft + 'px', 'top': _popTop + 'px', 'display': 'block', 'position': 'fixed'});
+    $popdiv.css({'left': _popLeft + 'px', 'top': _popTop + 'px', 'display': 'block', 'position': 'absolute'});
+    if ($popdiv.width() + 2 >= _windowWidth) {
+      $popdiv.width(_windowWidth * 0.85);
+    }
   };
 
 var noty = function(data, static) {
@@ -137,4 +140,27 @@ $(function() {
       fix_nav_bar();
     }
   });
+
+  if (notify.permissionLevel() === notify.PERMISSION_DEFAULT) {
+    var html = '<div id="open-notification" class="tc"><a href="#;">点我开启桌面提醒</a></div>';
+    $('body').prepend(html);
+  }
+
+  $('#open-notification a').on('click', this, function() {
+    notify.requestPermission(function(){
+      if (notify.permissionLevel() === notify.PERMISSION_GRANTED) {
+        $('#open-notification').remove();
+      }
+    });
+  });
+
+  function notifier() {
+  }
+  notifier.prototype.notify = function(icon, title, message) {
+      if (window.webkitNotifications !== undefined) {
+        window.webkitNotifications.createNotification(icon, title, message).show();
+      }
+  }
+
+  $.notifier = new notifier();
 });

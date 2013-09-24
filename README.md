@@ -6,6 +6,9 @@ The source of <http://collipa.com>
 
 ## 配置
 
+```
+mv config.back.py config.py
+```
 修改 collipa/config.py 文件：
 
 ### 数据库
@@ -35,14 +38,6 @@ The source of <http://collipa.com>
 sudo apt-get install memcached
 ```
 
-### 安装 pony
-
-```
-git clone https://github.com/ponyorm/pony
-cd pony
-sudo python setup.py install
-```
-
 ### 安装其他
 
 ```
@@ -60,3 +55,9 @@ python setup.py --init
 ```
 python app.py
 ```
+
+##License
+
+Released under the WTFPL license:
+
+http://www.wtfpl.net

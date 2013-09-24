@@ -8,7 +8,6 @@ import config
 
 from models import User, Message
 from pony.orm import *
-from helpers import url
 
 config = config.rec()
 
@@ -20,11 +19,9 @@ class MessageForm(BaseForm):
         ],
     )
 
-    @with_transaction
-    def save(self, user_id, message_box1_id, message_box2_id):
+    def save(self, **kargs):
         data = self.data
-        data.update({'user_id': user_id, 'message_box1_id': message_box1_id,
-            'message_box2_id': message_box2_id})
+        data.update(kargs)
         message = Message(**data).save()
         return message
 
@@ -62,11 +59,13 @@ class SignupForm(BaseForm):
         ],
     )
 
+    @db_session
     def validate_name(self, field):
         data = field.data.lower()
         if data in config.forbidden_name_list or User.get(name=data):
             raise ValidationError('此用户名已注册')
 
+    @db_session
     def validate_email(self, field):
         data = field.data.lower()
         if User.get(email=data):
@@ -100,6 +99,7 @@ class SigninForm(BaseForm):
     )
     #permanent = BooleanField('记住我')
 
+    @db_session
     def validate_password(self, field):
         account = self.account.data
         if '@' in account:
@@ -236,11 +236,6 @@ class SettingForm(BaseForm):
                 raise ValidationError('您已经没有修改域名的机会')
             if data in config.forbidden_name_list or User.get(urlname=data):
                 raise ValidationError('此域名已经被占用')
-
-    def validate_website(self, field):
-        data = field.data
-        if data and not url(data):
-                raise ValidationError('不符合 url 规范')
 
     def save(self, user=None):
         data = self.data

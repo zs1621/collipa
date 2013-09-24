@@ -15,8 +15,10 @@ import config
 from ._base import BaseHandler
 from pony.orm import *
 
-from models import User, MessageBox
+from models import User, MessageBox, Message
+from .api import WebSocketHandler
 from forms import SignupForm, SigninForm, MessageForm, SettingForm
+from extensions import mc, rd
 from helpers import force_int, get_year, get_month
 
 config = config.rec()
@@ -30,6 +32,7 @@ class EmailMixin(object):
         token = "%s|%s|%s|%s" % (user.email, salt, created, hsh)
         return base64.b64encode(token)
 
+    @db_session
     def _verify_token(self, token):
         try:
             token = base64.b64decode(token)
@@ -69,6 +72,7 @@ class EmailMixin(object):
         message.send()
 
 class HomeHandler(BaseHandler):
+    @db_session
     def get(self, urlname, view='index', category='all'):
         page = force_int(self.get_argument('page', 1), 1)
         user = User.get(urlname=urlname)
@@ -107,6 +111,7 @@ class HomeHandler(BaseHandler):
                 category=category, page=page, page_count=page_count, url=url)
 
 class SignupHandler(BaseHandler, EmailMixin):
+    @db_session
     def get(self):
         token = self.get_argument('verify', None)
         if token:
@@ -126,6 +131,7 @@ class SignupHandler(BaseHandler, EmailMixin):
         form = SignupForm()
         return self.render("user/signup.html", form=form)
 
+    @db_session
     def post(self):
         if self.current_user and self.get_argument("action", '') == 'email':
             if self.current_user.role != 'unverify':
@@ -150,14 +156,14 @@ class SignupHandler(BaseHandler, EmailMixin):
         url = '%s/signup?verify=%s' % \
                 (config.site_url, token)
 
-        subject = "帐号激活"
+        subject = "帐号激活 - " + config.site_name
         template = (
-            '<div>尊敬的 <strong>%(email)s</strong> 您好！</div>'
-            '<div>您的账户尚未激活，请点击此链接：'
-            '<a href="%(url)s">this link</a>.<div><br />'
-            "<div>如果您的浏览器不能点击此链接"
-            '请复制下面的链接然后粘贴在浏览器的地址栏里进行激活：<br />'
-            '%(url)s </div>'
+            '<p>尊敬的 <strong>%(email)s</strong> 您好！</p>'
+            '<p>您的账户尚未激活，请点击此链接：'
+            '<a href="%(url)s">点我激活</a>.</p>'
+            '<p>如果您的浏览器不能点击此链接，'
+            '请复制下面的链接然后粘贴在浏览器的地址栏里进行激活：</p>'
+            '<p>%(url)s</p>'
         ) % {'email': user.name, 'url': url}
         self.send_email(self, user.email, subject, template)
         result = {'status': 'info', 'message':
@@ -169,6 +175,7 @@ class SigninHandler(BaseHandler):
         form = SigninForm()
         return self.render("user/signin.html", form=form)
 
+    @db_session
     def post(self):
         form = SigninForm(self.request.arguments)
         if form.validate():
@@ -182,7 +189,7 @@ class SignoutHandler(BaseHandler):
         return self.redirect(self.next_url)
 
 class NotificationHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def get(self):
         page = force_int(self.get_argument('page', 1), 1)
@@ -193,7 +200,7 @@ class NotificationHandler(BaseHandler):
         return
 
 class MessageHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def get(self):
         page = force_int(self.get_argument('page', 1), 1)
@@ -222,15 +229,16 @@ class MessageHandler(BaseHandler):
         return self.render("user/message_box.html", category=category, page=page)
 
 class MessageCreateHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def post(self):
         user_id = force_int(self.get_argument('user_id', 0), 0)
-        current_user = self.current_user
-        user = User.get(id=user_id)
-        if user:
+        sender = self.current_user
+        receiver = User.get(id=user_id)
+        if receiver:
             form = MessageForm(self.request.arguments)
             if form.validate():
+                """
                 message_box1 = current_user.get_message_box(user=user)
                 message_box2 = user.get_message_box(user=current_user)
                 if not message_box1:
@@ -239,19 +247,23 @@ class MessageCreateHandler(BaseHandler):
                 if not message_box2:
                     message_box2 = MessageBox(sender_id=user.id,
                             receiver_id=current_user.id).save()
-                message = form.save(user_id=current_user.id,
-                        message_box1_id=message_box1.id,
-                        message_box2_id=message_box2.id)
+                """
+                message = form.save(sender_id=sender.id,
+                                    receiver_id=receiver.id)
                 result = {"status": "success", "message": "私信发送成功",
                         "content": message.content, "created": message.created,
-                        "avatar": current_user.get_avatar(size=48), "url":
-                        current_user.url, "id": message.id}
+                        "avatar": sender.get_avatar(size=48), "url":
+                        sender.url, "id": message.id}
             else:
                 result = {"status": "error", "message": "请填写至少 4 字的内容"}
             if self.is_ajax:
-                return self.write(result)
-            self.flash_message(result)
-            return self.redirect_next_url()
+                self.write(result)
+            else:
+                self.flash_message(result)
+                self.redirect_next_url()
+            self.finish()
+            WebSocketHandler.send_message(message.receiver_id, message)
+            return
         result = {"status": "error", "message": "没有目标用户，不能发送私信哦"}
         if self.is_ajax:
             return self.write(result)
@@ -259,7 +271,7 @@ class MessageCreateHandler(BaseHandler):
         return self.redirect_next_url()
 
 class ApiGetUserNameHandler(BaseHandler):
-    @with_transaction
+    @db_session
     def get(self):
         users = User.select()
         user_json = []
@@ -273,6 +285,7 @@ class PasswordHandler(BaseHandler, EmailMixin):
     - GET: 1. form view 2. verify link from email
     - POST: 1. send email to find password. 2. change password
     """
+    @db_session
     def get(self):
         token = self.get_argument('verify', None)
         if token and self._verify_token(token):
@@ -282,6 +295,7 @@ class PasswordHandler(BaseHandler, EmailMixin):
             return self.redirect('/signin')
         return self.render('user/password.html', token=None)
 
+    @db_session
     def post(self):
         action = self.get_argument('action', None)
         if action == 'email':
@@ -294,17 +308,20 @@ class PasswordHandler(BaseHandler, EmailMixin):
             return self.change_password()
         self.find_password()
 
+    @db_session
     def send_password_email(self):
         email = self.get_argument('email', None)
         if self.current_user:
             user = self.current_user
         elif not email:
-            self.flash_message("请填入邮箱地址", "error")
+            result = {"status": "error", "message": "请输入邮箱地址"}
+            self.flash_message(result)
             return self.redirect('/signin')
         else:
             user = User.get(email=email)
             if not user:
-                self.flash_message("用户不存在", "error")
+                result = {"status": "error", "message": "用户不存在"}
+                self.flash_message(result)
                 return self.redirect('/signin')
 
         token = self._create_token(user)
@@ -312,22 +329,25 @@ class PasswordHandler(BaseHandler, EmailMixin):
                 (config.site_url, token)
 
         template = (
-            '<div>你好 <strong>%(email)s</strong></div>'
+            '<div>你好 <strong>%(nickname)s</strong></div>'
             '<br /><div>请点击下面的链接来找回你的密码： '
             '<a href="%(url)s">this link</a>.<div><br />'
             "<div>如果你的浏览器不能点击上面的链接 "
             '把下面的链接地址粘贴复制到你的浏览器地址栏: <br />'
             '%(url)s </div>'
-        ) % {'email': user.alias, 'url': url}
-        self.flash_message('邮件已经发送，请检查您的邮箱', 'success')
+        ) % {'nickname': user.nickname, 'url': url}
+        result = {"status": "success", "message": "邮件已经发送，请检查您的邮箱"}
+        self.flash_message(result)
         self.send_email(self, user.email, '找回密码', template)
 
+    @db_session
     @tornado.web.authenticated
     def change_password(self):
         user = User.get(id=self.current_user.id)
         password = self.get_argument('password', None)
         if not user.check_password(password):
-            self.flash_message("旧密码有误", "error")
+            result = {"status": "error", "message": "旧密码有误"}
+            self.flash_message(result)
             return self.render('user/password.html', token=None)
         password1 = self.get_argument('password1', None)
         password2 = self.get_argument('password2', None)
@@ -344,24 +364,32 @@ class PasswordHandler(BaseHandler, EmailMixin):
         password2 = self.get_argument('password2', None)
         self._change_password(user, password1, password2)
 
+    @db_session
     def _change_password(self, user, password1, password2):
         if password1 != password2:
             token = self.get_argument('verify', None)
-            self.flash_message("两次输入的密码不匹配", 'error')
-            self.render('user/password.html', token=token)
-            return
+            result = {"status": "error", "message": "两次输入的密码不匹配"}
+            self.flash_message(result)
+            return self.render('user/password.html', token=token)
+        if not password1:
+            token = self.get_argument('verify', None)
+            result = {"status": "error", "message": "新密码不能为空"}
+            self.flash_message(result)
+            return self.render('user/password.html', token=token)
         user.password = user.create_password(password1)
         user.token = user.create_token(16)
         try:
             commit()
         except:
             pass
-        self.flash_message('密码已修改', 'success')
+        result = {"status": "success", "message": "密码已修改"}
+        self.flash_message(result)
         self.set_current_user(user)
-        self.redirect('/account/password')
+        return self.redirect('/account/password')
 
-class FindPasswordPageHandler(BaseHandler):
+class FindPasswordHandler(BaseHandler):
 
+    @db_session
     def get(self):
         if self.current_user:
             return self.redirect_next_url()
@@ -369,12 +397,14 @@ class FindPasswordPageHandler(BaseHandler):
 
 class SettingHandler(BaseHandler):
 
+    @db_session
     @tornado.web.authenticated
     def get(self):
         user = self.current_user
         form = SettingForm.init(user)
         return self.render("user/setting.html", form=form)
 
+    @db_session
     @tornado.web.authenticated
     def post(self):
         user = self.current_user
@@ -385,6 +415,7 @@ class SettingHandler(BaseHandler):
         return self.render("user/setting.html", form=form)
 
 class AvatarDelHandler(BaseHandler):
+    @db_session
     @tornado.web.authenticated
     def get(self):
         user = self.current_user
@@ -402,11 +433,13 @@ class AvatarDelHandler(BaseHandler):
         self.redirect(self.next_url)
 
 class AvatarUploadHandler(BaseHandler):
+    @db_session
     @tornado.web.authenticated
     def get(self):
         self.render("user/avatar_upload.html")
         return
 
+    @db_session
     def post(self):
         if self.request.files == {} or 'myavatar' not in self.request.files:
             self.write({"status": "error",
@@ -480,6 +513,7 @@ class AvatarUploadHandler(BaseHandler):
             src, "height": height, "width": width})
 
 class AvatarCropHandler(BaseHandler):
+    @db_session
     @tornado.web.authenticated
     def get(self):
         if not self.current_user.avatar_tmp:
@@ -490,6 +524,7 @@ class AvatarCropHandler(BaseHandler):
             return self.redirect_next_url()
         return self.render("user/avatar_crop.html")
 
+    @db_session
     @tornado.web.authenticated
     def post(self):
         user = self.current_user
@@ -537,6 +572,7 @@ class AvatarCropHandler(BaseHandler):
         return self.redirect_next_url()
 
 class BackgroundDelHandler(BaseHandler):
+    @db_session
     @tornado.web.authenticated
     def get(self):
         try:
@@ -556,6 +592,7 @@ class BackgroundDelHandler(BaseHandler):
         return self.redirect_next_url()
 
 class ImgUploadHandler(BaseHandler):
+    @db_session
     @tornado.web.authenticated
     def post(self):
         if not self.has_permission:
@@ -643,6 +680,7 @@ class ImgUploadHandler(BaseHandler):
         return
 
 class ShowHandler(BaseHandler):
+    @db_session
     def get(self):
         page = force_int(self.get_argument('page', 1), 1)
         category = self.get_argument('category', None)
@@ -657,6 +695,15 @@ class ShowHandler(BaseHandler):
             page_count = (user_count + config.user_paged - 1) // config.user_paged
             users = User.get_users(page=page)
             url = '/users?category=all'
+        elif category == 'online':
+            users = set()
+            online = rd.smembers("online") or [0]
+            online = [int(i) for i in online]
+            users = User.select(lambda rv: rv.id in online)
+            print users
+            user_count = len(users)
+            page_count = (user_count + config.user_paged - 1) // config.user_paged
+            url = '/users?category=online'
         return self.render("user/show.html", users=users, hot_users=hot_users,
                 new_users=new_users, page=page,
                 page_count=page_count, url=url, category=category)

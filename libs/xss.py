@@ -12,7 +12,10 @@ def search(text, regex):
         regex_cache[regex] = regexcmp
     return regexcmp.search(text)
 
-VALID_TAGS = {'span': {'class': '.*', 'style': '.*'},
+VALID_TAGS = {
+                'pre': {'class': '.*', 'style': '.*'},
+                'code': {'class': '.*', 'style': '.*'},
+                'span': {'class': '.*', 'style': '.*'},
                 'div': {'class': '.*', 'style': '.*'},
                 'h1': {}, 'h2': {}, 'h3': {}, 'h4': {},
                 'strong': {}, 'em': {},
@@ -22,7 +25,8 @@ VALID_TAGS = {'span': {'class': '.*', 'style': '.*'},
                 'li': {'class': '.*', 'style': '.*'},
                 'br': {},
                 'a': {'class': '.*', 'style': '.*',
-                    'href': '^https?://', 'title': '.*'},
+                    'href': '(^https?://|^/)', 'title': '.*',
+                    'data-username': '.*'},
                 'img': {'width': '\d(px|)', 'height': '\d(px|)',
                     '_url': '(^https?://|^/static/)',
                     'src': '(^https?://|^/static/)',

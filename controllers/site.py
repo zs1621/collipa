@@ -14,7 +14,7 @@ from helpers import force_int
 config = config.rec()
 
 class HomeHandler(BaseHandler):
-    @with_transaction
+    @db_session
     def get(self):
         page = force_int(self.get_argument('page', 1), 1)
         category = self.get_argument('category', None)
@@ -54,11 +54,11 @@ class HomeHandler(BaseHandler):
 
 class PageNotFoundHandler(BaseHandler):
     def get(self):
-        raise tornado.web.HTTPError(404)
+        return self.render("site/404.html")
 
 class PageErrorHandler(BaseHandler):
     def get(self):
-        raise tornado.web.HTTPError(502)
+        return self.render("site/502.html")
 
 class OtherPageErrorHandler(BaseHandler):
     def get(self):

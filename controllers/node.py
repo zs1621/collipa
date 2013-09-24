@@ -21,7 +21,7 @@ from helpers import strip_tags, get_year, get_month, force_int
 config = config.rec()
 
 class HomeHandler(BaseHandler):
-    @with_transaction
+    @db_session
     def get(self, urlname, category='all'):
         node = Node.get(urlname=urlname)
         if not node:
@@ -83,7 +83,7 @@ class HomeHandler(BaseHandler):
                 category=category, page=page, page_count=page_count, url=url)
 
 class CreateHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def get(self):
         if not self.has_permission:
@@ -99,7 +99,7 @@ class CreateHandler(BaseHandler):
         form = NodeForm.init(Node.get_node_choices(), selected)
         return self.render("node/create.html", form=form)
 
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def post(self):
         if not self.has_permission:
@@ -114,7 +114,7 @@ class CreateHandler(BaseHandler):
         return self.render("node/create.html", form=form)
 
 class EditHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def get(self, urlname):
         if not self.has_permission:
@@ -132,7 +132,7 @@ class EditHandler(BaseHandler):
                 node=node)
         return self.render("node/edit.html", form=form, node=node)
 
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def post(self, urlname):
         if not self.has_permission:
@@ -166,12 +166,14 @@ class EditHandler(BaseHandler):
         return self.render("node/edit.html", form=form, node=node)
 
 class ImgUploadHandler(BaseHandler):
+    @db_session
     @tornado.web.authenticated
     def post(self, node_id):
         if not self.has_permission:
             return
         if not self.current_user.is_admin:
             return self.redirect_next_url()
+        category = self.get_argument('category', None)
         node = Node.get(id=node_id)
         if not node:
             return self.redirect_next_url()
@@ -181,10 +183,18 @@ class ImgUploadHandler(BaseHandler):
             return
         image_type_list = ['image/gif', 'image/jpeg', 'image/pjpeg',
                 'image/png', 'image/bmp', 'image/x-png']
+        icon_type_list = ['image/gif', 'image/jpeg', 'image/pjpeg',
+                'image/png', 'image/bmp', 'image/x-png', 'image/ico .ico',
+                'image/x-icon']
         send_file = self.request.files['myimage'][0]
-        if send_file['content_type'] not in image_type_list:
+        if category != 'icon' and send_file['content_type'] not in image_type_list:
             self.write({"status": "error",
                 "message": "对不起，仅支持 jpg, jpeg, bmp, gif, png\
+                    格式的图片"})
+            return
+        if category == 'icon' and send_file['content_type'] not in icon_type_list:
+            self.write({"status": "error",
+                "message": "对不起，仅支持 ico, jpg, jpeg, bmp, gif, png\
                     格式的图片"})
             return
         if len(send_file['body']) > 6 * 1024 * 1024:
@@ -228,7 +238,6 @@ class ImgUploadHandler(BaseHandler):
         tmp_file.close()
         path = '/' +\
             '/'.join(tmp_name.split('/')[tmp_name.split('/').index("static"):])
-        category = self.get_argument('category', None)
         print category
         del_path = None
         if category == 'head':
@@ -274,6 +283,7 @@ class ImgUploadHandler(BaseHandler):
         return
 
 class ShowHandler(BaseHandler):
+    @db_session
     def get(self):
         page = force_int(self.get_argument('page', 1), 1)
         page_count = 0
