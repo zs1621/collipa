@@ -9,11 +9,12 @@ from pony.orm import *
 from models import Topic, Reply
 from forms import ReplyForm
 from helpers import put_notifier
+from .user import EmailMixin
 
 config = config.rec()
 
 class HomeHandler(BaseHandler):
-    @with_transaction
+    @db_session
     def get(self, reply_id):
         reply_id = int(reply_id)
         reply = Reply.get(id=reply_id)
@@ -47,7 +48,7 @@ class HomeHandler(BaseHandler):
         return self.render("reply/index.html", reply=reply)
 
 class CreateHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def post(self):
         if not self.has_permission:
@@ -88,7 +89,7 @@ class CreateHandler(BaseHandler):
                 category='index', page=page)
 
 class EditHandler(BaseHandler):
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def get(self, reply_id):
         if not self.has_permission:
@@ -99,7 +100,7 @@ class EditHandler(BaseHandler):
         form = ReplyForm(content=reply.content)
         return self.render("reply/edit.html", form=form, reply=reply)
 
-    @with_transaction
+    @db_session
     @tornado.web.authenticated
     def post(self, reply_id):
         if not self.has_permission:
@@ -121,7 +122,32 @@ class EditHandler(BaseHandler):
             return self.write(form.result)
         return self.render("reply/edit.html", form=form, reply=reply)
 
+class RemoveHandler(BaseHandler, EmailMixin):
+    @tornado.web.authenticated
+    def get(self, reply_id):
+        if not self.current_user.is_admin:
+            return self.redirect_next_url()
+        reply = Reply.get(id=reply_id)
+        if not reply:
+            return self.redirect_next_url()
+        subject = "评论删除通知 - " + config.site_name
+        template = (
+                '<p>尊敬的 <strong>%(nickname)s</strong> 您好！</p>'
+                '<p>您在主题 <strong><a href="%(topic_url)s">「%(topic_title)s」</a></strong>'
+                '下的评论由于违反社区规定而被删除，我们以邮件的形式给您进行了备份，备份数据如下：</p>'
+                '<div class="content">%(content)s</div>'
+                ) % {'nickname': reply.author.nickname,
+                        'topic_url': config.site_url + reply.topic.url,
+                        'topic_title': reply.topic.title,
+                        'content': reply.content}
+        self.send_email(self, reply.author.email, subject, template)
+        reply.remove()
+        result = {'status': 'success', 'message': '已成功删除'}
+        self.flash_message(result)
+        return self.redirect_next_url()
+
 class HistoryHandler(BaseHandler):
+    @db_session
     def get(self, reply_id):
         reply = Reply.get(id=reply_id)
         if not reply:
